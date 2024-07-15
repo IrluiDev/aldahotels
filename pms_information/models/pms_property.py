@@ -11,8 +11,10 @@ class PmsProperty(models.Model):
 
     total_tourism_rooms = fields.Integer(
         string='Tourism Rooms',
-        help="Number of rooms in the hotel.",
-        default= 0
+        help="Number of queuuueueueuu in the hotel.",
+        compute='_compute_total_rooms',
+        store=True,
+        default=lambda self: self._get_default_total_rooms()
     )
 
     open_date = fields.Datetime(
@@ -77,15 +79,25 @@ class PmsProperty(models.Model):
         help="From the opening of a hotel the first 17 months a hotel has RAMP-UP status, from month 17 it has RAMP-RATE status.",
     )
 
-    @api.depends('open_date')
+    @api.depends('room_ids')
     def _compute_total_rooms(self):
         for record in self:
-            target_rooms = (
-                self.env["pms.room"]
-                .with_context(active_test=True)
-                .sudo().search([("pms_property_id", "=", record.id)])
-            )
-            record.total_rooms = len(target_rooms)
+            record.total_rooms = len(record.room_ids)
+    
+    @api.constrains('total_tourism_rooms')
+    def _check_total_tourism_rooms(self):
+        for record in self:
+            if record.total_tourism_rooms > len(record.room_ids):
+                raise ValidationError(_('The number of tourism rooms cannot exceed the total number of rooms.'))
+    
+    @api.model
+    def _get_default_total_rooms(self):
+        # Este método calcula el valor predeterminado de `total_rooms`.
+        first_property = self.env['pms.property'].search([], limit=1)
+        if first_property:
+            target_rooms = self.env['pms.room'].search([('pms_property_id', '=', first_property.id)])
+            return len(target_rooms)
+        return 0
     
     @api.depends('partner_id', 'partner_id.email')
     def _compute_email(self):
